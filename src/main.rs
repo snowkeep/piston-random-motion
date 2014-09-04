@@ -11,17 +11,38 @@ use std::cmp::{max, min}; //use for edge behav
 use opengl_graphics::{
     Gl,
 };
-use sdl2_game_window::GameWindowSDL2;
+use sdl2_game_window::WindowSDL2;
 use graphics::*;
 use piston::{
-    GameIterator,
-    GameIteratorSettings,
-    GameWindowSettings,
-    KeyPress,
-    MousePress,
-    MouseMove,
+    EventIterator,
+    EventSettings,
+    WindowSettings,
+};
+
+use piston::input::keyboard::{
+    P,
+    C,
+    R,
+    Space
+
+};
+
+use piston::input::mouse:: {
+    Left,
+};
+
+use piston::input::{
+    Keyboard,
+    Mouse,
+    MouseCursor,
+    Move,
+    Press,
+};
+
+use piston::{
+    Input,
     Render,
-    Update,
+    Update
 };
 
 use std::rand;
@@ -146,16 +167,18 @@ impl GameState {
 }//end impl GameState
 
 fn main() {
-    let mut window = GameWindowSDL2::new(
-        GameWindowSettings {
+    let mut window = WindowSDL2::new(
+        piston::shader_version::opengl::OpenGL_3_2,
+        WindowSettings {
             title: "Random motion of particles".to_string(),
             size: [WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32],
             fullscreen: false,
             exit_on_esc: true,
+            samples: 0
         }
     );
 
-    let game_iter_settings = GameIteratorSettings {
+    let event_settings = EventSettings {
             updates_per_second: 1000,
             max_frames_per_second: 60,
         };
@@ -171,7 +194,7 @@ fn main() {
     let mut mouse_x: f64 = 0.0;
     let mut mouse_y: f64 = 0.0;
 
-    for event in GameIterator::new(&mut window, &game_iter_settings) {
+    for event in EventIterator::new(&mut window, &event_settings) {
         match event {
             Render(args) => {
                 gl.viewport(0, 0, args.width as i32, args.height as i32);
@@ -188,24 +211,24 @@ fn main() {
                 }
             },
 
-            KeyPress(args) => {
-                match args.key {
-                    piston::keyboard::P => {paused = !paused},
-                    piston::keyboard::Space => {game.update()},
-                    piston::keyboard::C => {game = GameState::new(0, GRID_WIDTH, GRID_HEIGHT)}, //clean screan
-                    piston::keyboard::R => {game = GameState::new(45, GRID_WIDTH, GRID_HEIGHT)}, //reset
+            Input(Press(Keyboard(key))) => {
+                match key {
+                    P => {paused = !paused},
+                    Space => {game.update()},
+                    C => {game = GameState::new(0, GRID_WIDTH, GRID_HEIGHT)}, //clean screan
+                    R => {game = GameState::new(45, GRID_WIDTH, GRID_HEIGHT)}, //reset
                     _ => {}
                 }
             }
 
-            MouseMove(args) => {
-                mouse_x = args.x; //get mouse coordinates for MousePress
-                mouse_y = args.y;
+            Input(Move(MouseCursor(x, y))) => {
+                mouse_x = x; //get mouse coordinates for MousePress
+                mouse_y = y;
             }
 
-            MousePress(args) => {
-                match args.button {
-                    piston::mouse::Left => {
+            Input(Press(Mouse(button))) => {
+                match button {
+                    Left => {
                         //translate mouse coord. to grid
                         let loc = Loc {x: (mouse_x/BLOCK_SIZE as f64) as uint,
                                        y: (mouse_y/BLOCK_SIZE as f64) as uint,
