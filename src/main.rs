@@ -3,23 +3,38 @@
 
 extern crate graphics;
 extern crate piston;
-extern crate sdl2_game_window;
+extern crate sdl2_window;
 extern crate opengl_graphics;
+extern crate shader_version;
+extern crate event;
+extern crate input;
 
 use std::cmp::{max, min}; //use for edge behav
+used std::cell::RefCell;
 
-use opengl_graphics::{
-    Gl,
-};
-use sdl2_game_window::WindowSDL2;
-use graphics::*;
-use piston::{
-    EventIterator,
-    EventSettings,
-    WindowSettings,
+use sdl2_window::Sdl2Window as Window;
+use opengl_graphics::Gl;
+use shader_version::opengl::OpenGL::_3_2;
+
+use piston::RenderArgs;
+
+use graphics::{
+  Context
 };
 
-use piston::input::keyboard::{
+use event::{
+  Event,
+  Events,
+  RenderEvent,
+  UpdateEvent,
+  PressEvent,
+  ReleaseEvent,
+  WindowSettings
+};
+
+use input::Button;
+
+use input::keyboard::Key::{
     P,
     C,
     R,
@@ -39,40 +54,34 @@ use piston::input::{
     Press,
 };
 
-use piston::{
-    Input,
-    Render,
-    Update
-};
-
 use std::rand;
 use std::rand::{Rng, SeedableRng, XorShiftRng};
 
-pub static GRID_HEIGHT: uint = 100;
-pub static GRID_WIDTH: uint = 100;
+const GRID_HEIGHT: usize = 100;
+const GRID_WIDTH: usize = 100;
 
-pub static BLOCK_SIZE: uint = 8;
+const BLOCK_SIZE: usize = 8;
 
-pub static WINDOW_HEIGHT: uint = GRID_HEIGHT * BLOCK_SIZE;
-pub static WINDOW_WIDTH: uint = GRID_WIDTH * BLOCK_SIZE;
+const WINDOW_HEIGHT: usize = GRID_HEIGHT * BLOCK_SIZE;
+const WINDOW_WIDTH: usize = GRID_WIDTH * BLOCK_SIZE;
 
 #[deriving(PartialEq, Clone)]
 struct Loc {
-	pub x: uint,
-	pub y: uint,
+	pub x: usize,
+	pub y: usize,
     pub color: (f32, f32, f32)
 }
 
 struct GameState {
     pub map: [[bool, ..GRID_HEIGHT], ..GRID_WIDTH],
     pub entities: Vec<Loc>,
-    pub max_x: uint,
-    pub max_y: uint,
+    pub max_x: usize,
+    pub max_y: usize,
     pub rng: XorShiftRng
 }
 
 impl GameState {
-    pub fn new(square_side: uint, max_x: uint, max_y: uint) -> GameState {
+    pub fn new(square_side: usize, max_x: usize, max_y: usize) -> GameState {
 
         let mut map = [[false, ..GRID_HEIGHT], ..GRID_WIDTH];
         let mut new_entities: Vec<Loc> = Vec::with_capacity((square_side*square_side*2));
@@ -104,21 +113,21 @@ impl GameState {
         }
     }
 
-    pub fn mov(&mut self, loc: Loc, x: int, y: int) -> Loc {
+    pub fn mov(&mut self, loc: Loc, x: isize, y: isize) -> Loc {
         //stopping behavior, to prevent getting out of edges
-        let x = min(max( (loc.x as int) + x, 0), (self.max_x as int) - 1);
-        let y = min(max( (loc.y as int) + y, 0), (self.max_y as int) - 1);
+        let x = min(max( (loc.x as isize) + x, 0), (self.max_x as isize) - 1);
+        let y = min(max( (loc.y as isize) + y, 0), (self.max_y as isize) - 1);
 
         Loc {
-            x: x as uint,
-            y: y as uint,
+            x: x as usize,
+            y: y as usize,
             color: loc.color
         }
 
     }//end mov
 
     pub fn random_mov(&mut self, loc: Loc) -> Loc {
-        let r = self.rng.gen::<uint>() % 8; // % trick to get range 0-7
+        let r = self.rng.gen::<usize>() % 8; // % trick to get range 0-7
         let new_entity = match r {
             0 => {self.mov(loc ,1, 0)},
             1 => {self.mov(loc, -1, 0)},
@@ -141,7 +150,7 @@ impl GameState {
             let new_loc = self.random_mov(loc);
             //calculate opposite loc for bouncing
             let (opp_mov_x, opp_mov_y) = (loc.x - new_loc.x, loc.y - new_loc.y);
-            let opposite_new_loc = self.mov(new_loc, opp_mov_x as int, opp_mov_y as int);
+            let opposite_new_loc = self.mov(new_loc, opp_mov_x as isize, opp_mov_y as isize);
 
             let mut new_free = true;
             let mut oppos_free = true;
@@ -187,7 +196,7 @@ fn main() {
 
     let mut game = GameState::new(45, GRID_WIDTH, GRID_HEIGHT);
 
-    let mut update_counter: uint = 0;
+    let mut update_counter: usize = 0;
 
     let mut paused = true;
 
@@ -230,8 +239,8 @@ fn main() {
                 match button {
                     Left => {
                         //translate mouse coord. to grid
-                        let loc = Loc {x: (mouse_x/BLOCK_SIZE as f64) as uint,
-                                       y: (mouse_y/BLOCK_SIZE as f64) as uint,
+                        let loc = Loc {x: (mouse_x/BLOCK_SIZE as f64) as usize,
+                                       y: (mouse_y/BLOCK_SIZE as f64) as usize,
                                        color: (0.0, 1.0, 0.0)};
                         //if it exists, remove it
                         if game.map[loc.x][loc.y] {
