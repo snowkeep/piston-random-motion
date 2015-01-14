@@ -18,7 +18,8 @@ use shader_version::opengl::OpenGL::_3_2;
 use piston::RenderArgs;
 
 use graphics::{
-    Context
+    Context,
+    Ellipse
 };
 
 use event::{
@@ -27,11 +28,10 @@ use event::{
     RenderEvent,
     UpdateEvent,
     PressEvent,
+    MouseCursorEvent,
     ReleaseEvent,
     WindowSettings
 };
-
-use event::mouse::MouseCursorEvent;
 
 use input::{
     Button,
@@ -67,10 +67,11 @@ const WINDOW_WIDTH: usize = GRID_WIDTH * BLOCK_SIZE;
 struct Loc {
   	pub x: usize,
 	  pub y: usize,
-    pub color: (f32, f32, f32)
+    pub color: [f32; 4]
 }
 
 struct GameState {
+    gl: Gl,
     pub map: [[bool; GRID_HEIGHT]; GRID_WIDTH],
     pub entities: Vec<Loc>,
     pub max_x: usize,
@@ -79,9 +80,9 @@ struct GameState {
 }
 
 impl GameState {
-    pub fn new(square_side: usize, max_x: usize, max_y: usize) -> GameState {
+    pub fn new(gl: Gl, square_side: usize, max_x: usize, max_y: usize) -> GameState {
 
-        let mut map = [[false, ..GRID_HEIGHT], ..GRID_WIDTH];
+        let mut map = [[false; GRID_HEIGHT]; GRID_WIDTH];
         let mut new_entities: Vec<Loc> = Vec::with_capacity((square_side*square_side*2));
         //create 2 squares of red and blue particles in opposite corners
         for x in range(0, square_side){
@@ -90,19 +91,20 @@ impl GameState {
                 new_entities.push(
                     Loc { x: x,
                           y: y,
-                          color: (1.0, 0.0, 0.0)}
+                          color: [1.0, 0.0, 0.0, 1.0]}
                     );
 
                 map[(GRID_WIDTH - x -1)][(GRID_HEIGHT - y - 1)] = true;
                 new_entities.push(
                     Loc { x: GRID_WIDTH - x -1,
                           y: GRID_HEIGHT - y - 1,
-                          color: (0.0, 0.0, 1.0)});
+                          color: [0.0, 0.0, 1.0, 1.0]});
             }
         };
         let rng: rand::XorShiftRng = SeedableRng::from_seed([1, 2, 3, 4]);
 
         GameState {
+            gl: gl,
             map: map,
             entities: new_entities,
             max_x: max_x,
@@ -111,7 +113,7 @@ impl GameState {
         }
     }
 
-    pub fn mov(&mut self, loc: Loc, x: isize, y: isize) -> Loc {
+    pub fn mov(&mut self, loc: &Loc, x: isize, y: isize) -> Loc {
         //stopping behavior, to prevent getting out of edges
         let x = min(max( (loc.x as isize) + x, 0), (self.max_x as isize) - 1);
         let y = min(max( (loc.y as isize) + y, 0), (self.max_y as isize) - 1);
@@ -124,7 +126,7 @@ impl GameState {
 
     }//end mov
 
-    pub fn random_mov(&mut self, loc: Loc) -> Loc {
+    pub fn random_mov(&mut self, loc: &Loc) -> Loc {
         let r = self.rng.gen::<usize>() % 8; // % trick to get range 0-7
         let new_entity = match r {
             0 => {self.mov(loc ,1, 0)},
@@ -135,20 +137,35 @@ impl GameState {
             5 => {self.mov(loc, -1, -1)},
             6 => {self.mov(loc, -1, 1)},
             7 => {self.mov(loc, 1, -1)},
-            _ => {loc} //should never happen
+            _ => {self.mov(loc, 0, 0)} //should never happen
         };
         new_entity
     }//end random_mov
+    
+    pub fn render(&mut self, args: &RenderArgs) {
+        self.gl.viewport(0, 0, args.width as i32, args.height as i32);
+        let c = &Context::abs(args.width as f64, args.height as f64);
+        graphics::clear(graphics::color::BLACK, &mut self.gl);
+        for entity in self.entities.iter() {
+            Ellipse::new(entity.color).draw([
+                    (entity.x * BLOCK_SIZE + BLOCK_SIZE/2) as f64,
+                    (entity.y * BLOCK_SIZE + BLOCK_SIZE/2) as f64,
+                    (BLOCK_SIZE/2) as f64,
+                    (BLOCK_SIZE/2) as f64
+                ], c, &mut self.gl);
+        }
+
+    }
 
 
     pub fn update(&mut self) {
         //MAIN LOGIC
         for i in range(0, self.entities.len()) {
-            let loc = self.entities[i];
+            let ref loc = self.entities[i];
             let new_loc = self.random_mov(loc);
             //calculate opposite loc for bouncing
             let (opp_mov_x, opp_mov_y) = (loc.x - new_loc.x, loc.y - new_loc.y);
-            let opposite_new_loc = self.mov(new_loc, opp_mov_x as isize, opp_mov_y as isize);
+            let opposite_new_loc = self.mov(&new_loc, opp_mov_x as isize, opp_mov_y as isize);
 
             let mut new_free = true;
             let mut oppos_free = true;
@@ -161,12 +178,12 @@ impl GameState {
             if new_free {
                 self.map[loc.x][loc.y] = false;
                 self.map[new_loc.x][new_loc.y] = true;
-                *self.entities.get_mut(i) = new_loc; //self.entities[i] = new_loc; not working yet
+                self.entities[i] = new_loc;
             }//try to bounce
             else if oppos_free {
                 self.map[loc.x][loc.y] = false;
                 self.map[opposite_new_loc.x][opposite_new_loc.y] = true;
-                *self.entities.get_mut(i) = opposite_new_loc;
+                self.entities[i] = opposite_new_loc;
             }// end if
         }//end for i
     }//end update
@@ -187,9 +204,7 @@ fn main() {
 
     let window = RefCell::new(window);
 
-    let ref mut gl = Gl::new();
-
-    let mut game = GameState::new(45, GRID_WIDTH, GRID_HEIGHT);
+    let mut game = GameState::new(Gl::new(_3_2), 45, GRID_WIDTH, GRID_HEIGHT);
 
     let mut update_counter: usize = 0;
 
@@ -200,21 +215,6 @@ fn main() {
 
     for e in Events::new(&window) {
         let e: Event<input::Input> = e;
-        e.render(|r| {
-            gl.viewport(0, 0, args.width as i32, args.height as i32);
-            let c = Context::abs(args.width as f64, args.height as f64);
-            c.rgb(0.0, 0.0, 0.0).draw(gl);
-            for entity in game.entities.iter() {
-                c.circle(
-                        (entity.x * BLOCK_SIZE + BLOCK_SIZE/2) as f64,
-                        (entity.y * BLOCK_SIZE + BLOCK_SIZE/2) as f64,
-                        (BLOCK_SIZE/2) as f64
-                    )
-                    .rgb(entity.color.val0(), entity.color.val1(), entity.color.val2())
-                    .draw(gl);
-            }
-
-        });
         e.press(|button| {
             match button {
                 Button::Keyboard(key) => {
@@ -222,8 +222,8 @@ fn main() {
 
                         P => {paused = !paused},
                         Space => {game.update()},
-                        C => {game = GameState::new(0, GRID_WIDTH, GRID_HEIGHT)}, //clean screan
-                        R => {game = GameState::new(45, GRID_WIDTH, GRID_HEIGHT)}, //reset
+                        C => {game = GameState::new(Gl::new(_3_2), 0, GRID_WIDTH, GRID_HEIGHT)}, //clean screan
+                        R => {game = GameState::new(Gl::new(_3_2), 45, GRID_WIDTH, GRID_HEIGHT)}, //reset
                         _ => {}
                     }
                 }
@@ -233,7 +233,7 @@ fn main() {
                             //translate mouse coord. to grid
                             let loc = Loc {x: (mouse_x/BLOCK_SIZE as f64) as usize,
                                            y: (mouse_y/BLOCK_SIZE as f64) as usize,
-                                           color: (0.0, 1.0, 0.0)};
+                                           color: [0.0, 1.0, 0.0, 1.0]};
                             //if it exists, remove it
                             if game.map[loc.x][loc.y] {
                                 game.map[loc.x][loc.y] = false;
@@ -257,6 +257,7 @@ fn main() {
             mouse_x = x; //get mouse coordinates for MousePress
             mouse_y = y;
         });
+        e.render(|r| game.render(r));
         e.update(|_| {
             if !paused {
                 update_counter += 1;
