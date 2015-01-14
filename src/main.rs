@@ -1,5 +1,4 @@
 //RANDOM MOTION
-#![feature(globs)] //can use foo::*;
 
 extern crate graphics;
 extern crate piston;
@@ -10,7 +9,7 @@ extern crate event;
 extern crate input;
 
 use std::cmp::{max, min}; //use for edge behav
-used std::cell::RefCell;
+use std::cell::RefCell;
 
 use sdl2_window::Sdl2Window as Window;
 use opengl_graphics::Gl;
@@ -19,20 +18,25 @@ use shader_version::opengl::OpenGL::_3_2;
 use piston::RenderArgs;
 
 use graphics::{
-  Context
+    Context
 };
 
 use event::{
-  Event,
-  Events,
-  RenderEvent,
-  UpdateEvent,
-  PressEvent,
-  ReleaseEvent,
-  WindowSettings
+    Event,
+    Events,
+    RenderEvent,
+    UpdateEvent,
+    PressEvent,
+    ReleaseEvent,
+    WindowSettings
 };
 
-use input::Button;
+use event::mouse::MouseCursorEvent;
+
+use input::{
+    Button,
+    Motion
+};
 
 use input::keyboard::Key::{
     P,
@@ -42,17 +46,11 @@ use input::keyboard::Key::{
 
 };
 
-use piston::input::mouse:: {
-    Left,
+use input::mouse::MouseButton::{
+    Left
 };
 
-use piston::input::{
-    Keyboard,
-    Mouse,
-    MouseCursor,
-    Move,
-    Press,
-};
+
 
 use std::rand;
 use std::rand::{Rng, SeedableRng, XorShiftRng};
@@ -67,13 +65,13 @@ const WINDOW_WIDTH: usize = GRID_WIDTH * BLOCK_SIZE;
 
 #[deriving(PartialEq, Clone)]
 struct Loc {
-	pub x: usize,
-	pub y: usize,
+  	pub x: usize,
+	  pub y: usize,
     pub color: (f32, f32, f32)
 }
 
 struct GameState {
-    pub map: [[bool, ..GRID_HEIGHT], ..GRID_WIDTH],
+    pub map: [[bool; GRID_HEIGHT]; GRID_WIDTH],
     pub entities: Vec<Loc>,
     pub max_x: usize,
     pub max_y: usize,
@@ -176,8 +174,8 @@ impl GameState {
 }//end impl GameState
 
 fn main() {
-    let mut window = WindowSDL2::new(
-        piston::shader_version::opengl::OpenGL_3_2,
+    let mut window = Window::new(
+        shader_version::OpenGL::_3_2,
         WindowSettings {
             title: "Random motion of particles".to_string(),
             size: [WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32],
@@ -187,10 +185,7 @@ fn main() {
         }
     );
 
-    let event_settings = EventSettings {
-            updates_per_second: 1000,
-            max_frames_per_second: 60,
-        };
+    let window = RefCell::new(window);
 
     let ref mut gl = Gl::new();
 
@@ -203,74 +198,74 @@ fn main() {
     let mut mouse_x: f64 = 0.0;
     let mut mouse_y: f64 = 0.0;
 
-    for event in EventIterator::new(&mut window, &event_settings) {
-        match event {
-            Render(args) => {
-                gl.viewport(0, 0, args.width as i32, args.height as i32);
-                let c = Context::abs(args.width as f64, args.height as f64);
-                c.rgb(0.0, 0.0, 0.0).draw(gl);
-                for entity in game.entities.iter() {
-                    c.circle(
-                            (entity.x * BLOCK_SIZE + BLOCK_SIZE/2) as f64,
-                            (entity.y * BLOCK_SIZE + BLOCK_SIZE/2) as f64,
-                            (BLOCK_SIZE/2) as f64
-                        )
-                        .rgb(entity.color.val0(), entity.color.val1(), entity.color.val2())
-                        .draw(gl);
-                }
-            },
-
-            Input(Press(Keyboard(key))) => {
-                match key {
-                    P => {paused = !paused},
-                    Space => {game.update()},
-                    C => {game = GameState::new(0, GRID_WIDTH, GRID_HEIGHT)}, //clean screan
-                    R => {game = GameState::new(45, GRID_WIDTH, GRID_HEIGHT)}, //reset
-                    _ => {}
-                }
+    for e in Events::new(&window) {
+        let e: Event<input::Input> = e;
+        e.render(|r| {
+            gl.viewport(0, 0, args.width as i32, args.height as i32);
+            let c = Context::abs(args.width as f64, args.height as f64);
+            c.rgb(0.0, 0.0, 0.0).draw(gl);
+            for entity in game.entities.iter() {
+                c.circle(
+                        (entity.x * BLOCK_SIZE + BLOCK_SIZE/2) as f64,
+                        (entity.y * BLOCK_SIZE + BLOCK_SIZE/2) as f64,
+                        (BLOCK_SIZE/2) as f64
+                    )
+                    .rgb(entity.color.val0(), entity.color.val1(), entity.color.val2())
+                    .draw(gl);
             }
 
-            Input(Move(MouseCursor(x, y))) => {
-                mouse_x = x; //get mouse coordinates for MousePress
-                mouse_y = y;
-            }
+        });
+        e.press(|button| {
+            match button {
+                Button::Keyboard(key) => {
+                    match key {
 
-            Input(Press(Mouse(button))) => {
-                match button {
-                    Left => {
-                        //translate mouse coord. to grid
-                        let loc = Loc {x: (mouse_x/BLOCK_SIZE as f64) as usize,
-                                       y: (mouse_y/BLOCK_SIZE as f64) as usize,
-                                       color: (0.0, 1.0, 0.0)};
-                        //if it exists, remove it
-                        if game.map[loc.x][loc.y] {
-                            game.map[loc.x][loc.y] = false;
-                            for i in range(0, game.entities.len()){
-                                if game.entities[i].x == loc.x && game.entities[i].y == loc.y {
-                                    game.entities.swap_remove(i); //always O(1), doesn't preserve order
-                                    break;
-                                };
-                            }
-                        } else { //if it doesnt exist, add it
-                            game.map[loc.x][loc.y] = true;
-                            game.entities.push(loc);
-                        };
-                    },//Left
-                    _ => {}
-                }//match
-            }//MousePress
-
-            Update(_) => {
-                if !paused {
-                    update_counter += 1;
-                    if update_counter == 10 {
-                        game.update();
-                        update_counter = 0;
+                        P => {paused = !paused},
+                        Space => {game.update()},
+                        C => {game = GameState::new(0, GRID_WIDTH, GRID_HEIGHT)}, //clean screan
+                        R => {game = GameState::new(45, GRID_WIDTH, GRID_HEIGHT)}, //reset
+                        _ => {}
                     }
-                } //end if !paused
-            }//end Update()
-            _ => {}
+                }
+                Button::Mouse(click) => {
+                    match click { 
+                        Left => {
+                            //translate mouse coord. to grid
+                            let loc = Loc {x: (mouse_x/BLOCK_SIZE as f64) as usize,
+                                           y: (mouse_y/BLOCK_SIZE as f64) as usize,
+                                           color: (0.0, 1.0, 0.0)};
+                            //if it exists, remove it
+                            if game.map[loc.x][loc.y] {
+                                game.map[loc.x][loc.y] = false;
+                                for i in range(0, game.entities.len()){
+                                    if game.entities[i].x == loc.x && game.entities[i].y == loc.y {
+                                        game.entities.swap_remove(i); //always O(1), doesn't preserve order
+                                        break;
+                                    };
+                                }
+                            } else { //if it doesnt exist, add it
+                                game.map[loc.x][loc.y] = true;
+                                game.entities.push(loc);
+                            };
+                        },//Left
+                        _ => {}
+                    }//match click
+                }//MousePress
+            }//match button
+        });//press event
+        e.mouse_cursor(|x, y| {
+            mouse_x = x; //get mouse coordinates for MousePress
+            mouse_y = y;
+        });
+        e.update(|_| {
+            if !paused {
+                update_counter += 1;
+                if update_counter == 10 {
+                    game.update();
+                    update_counter = 0;
+                }
+            } //end if !paused
 
-        }
+        });
     }
 }
