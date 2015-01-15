@@ -144,12 +144,7 @@ impl GameState {
         let c = &Context::abs(args.width as f64, args.height as f64);
         graphics::clear(graphics::color::BLACK, &mut self.gl);
         for entity in self.entities.iter() {
-            Ellipse::new(entity.color).draw([
-                    (entity.x * BLOCK_SIZE + BLOCK_SIZE/2) as f64,
-                    (entity.y * BLOCK_SIZE + BLOCK_SIZE/2) as f64,
-                    (BLOCK_SIZE/2) as f64,
-                    (BLOCK_SIZE/2) as f64
-                ], c, &mut self.gl);
+              entity.render(c, &mut self.gl);
         }
 
     }
@@ -186,6 +181,18 @@ impl GameState {
     }//end update
 
 }//end impl GameState
+
+impl Loc {
+    pub fn render(&self, c: &Context, gl: &mut Gl) {
+        Ellipse::new(self.color).draw([
+            (self.x * BLOCK_SIZE + BLOCK_SIZE/2) as f64,
+            (self.y * BLOCK_SIZE + BLOCK_SIZE/2) as f64,
+            (BLOCK_SIZE/2) as f64,
+            (BLOCK_SIZE/2) as f64
+        ], c, gl);
+    }
+}
+
 
 fn main() {
     let window = Window::new(
