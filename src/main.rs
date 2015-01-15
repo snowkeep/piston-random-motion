@@ -29,14 +29,10 @@ use event::{
     UpdateEvent,
     PressEvent,
     MouseCursorEvent,
-    ReleaseEvent,
     WindowSettings
 };
 
-use input::{
-    Button,
-    Motion
-};
+use input::Button;
 
 use input::keyboard::Key::{
     P,
@@ -63,7 +59,7 @@ const BLOCK_SIZE: usize = 8;
 const WINDOW_HEIGHT: usize = GRID_HEIGHT * BLOCK_SIZE;
 const WINDOW_WIDTH: usize = GRID_WIDTH * BLOCK_SIZE;
 
-#[deriving(PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 struct Loc {
   	pub x: usize,
 	  pub y: usize,
@@ -85,8 +81,9 @@ impl GameState {
         let mut map = [[false; GRID_HEIGHT]; GRID_WIDTH];
         let mut new_entities: Vec<Loc> = Vec::with_capacity((square_side*square_side*2));
         //create 2 squares of red and blue particles in opposite corners
-        for x in range(0, square_side){
-            for y in range(0, square_side){
+//        for x in range(0, square_side){
+        for x in (0..square_side){
+            for y in (0..square_side){
                 map[x][y] = true;
                 new_entities.push(
                     Loc { x: x,
@@ -113,7 +110,7 @@ impl GameState {
         }
     }
 
-    pub fn mov(&mut self, loc: &Loc, x: isize, y: isize) -> Loc {
+    pub fn mov(&self, loc: &Loc, x: isize, y: isize) -> Loc {
         //stopping behavior, to prevent getting out of edges
         let x = min(max( (loc.x as isize) + x, 0), (self.max_x as isize) - 1);
         let y = min(max( (loc.y as isize) + y, 0), (self.max_y as isize) - 1);
@@ -126,7 +123,7 @@ impl GameState {
 
     }//end mov
 
-    pub fn random_mov(&mut self, loc: &Loc) -> Loc {
+    fn random_mov(&mut self, loc: &Loc) -> Loc {
         let r = self.rng.gen::<usize>() % 8; // % trick to get range 0-7
         let new_entity = match r {
             0 => {self.mov(loc ,1, 0)},
@@ -160,8 +157,8 @@ impl GameState {
 
     pub fn update(&mut self) {
         //MAIN LOGIC
-        for i in range(0, self.entities.len()) {
-            let ref loc = self.entities[i];
+        for i in (0..self.entities.len()) {
+            let ref loc = self.entities[i].clone();
             let new_loc = self.random_mov(loc);
             //calculate opposite loc for bouncing
             let (opp_mov_x, opp_mov_y) = (loc.x - new_loc.x, loc.y - new_loc.y);
@@ -191,7 +188,7 @@ impl GameState {
 }//end impl GameState
 
 fn main() {
-    let mut window = Window::new(
+    let window = Window::new(
         shader_version::OpenGL::_3_2,
         WindowSettings {
             title: "Random motion of particles".to_string(),
@@ -237,7 +234,7 @@ fn main() {
                             //if it exists, remove it
                             if game.map[loc.x][loc.y] {
                                 game.map[loc.x][loc.y] = false;
-                                for i in range(0, game.entities.len()){
+                                for i in (0..game.entities.len()){
                                     if game.entities[i].x == loc.x && game.entities[i].y == loc.y {
                                         game.entities.swap_remove(i); //always O(1), doesn't preserve order
                                         break;
